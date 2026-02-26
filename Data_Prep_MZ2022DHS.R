@@ -26,20 +26,21 @@ library(stringr)    # to manage MCASEID and CASEID
 # -----------------------------------------------------------------------------
 
 # Load household-level data files
-hh_basic <- read.csv(here("Data", "MZIR80", "RECH0.CSV"), sep = ";")        # Basic household information
-hh_schedule <- read.csv(here("Data", "MZIR80", "RECH1.CSV"), sep = ";")     # Household roster
-hh_chars <- read.csv(here("Data", "MZIR80", "RECH3.CSV"), sep = ";")        # Household characteristics
-child_nut_data <- read.csv(here("Data", "MZIR80", "RECH6.CSV"), sep = ";")  # Child nutrition measurements
+hh_basic <- read.csv(here("Data", "MZIQ80", "RECH0.CSV"), sep = ";")        # Basic household information
+hh_schedule <- read.csv(here("Data", "MZIQ80", "RECH1.CSV"), sep = ";")     # Household roster
+hh_chars <- read.csv(here("Data", "MZIQ80", "RECH3.CSV"), sep = ";")        # Household characteristics
+child_nut_data <- read.csv(here("Data", "MZIQ80", "RECH6.CSV"), sep = ";")  # Child nutrition measurements
 
 # Load individual women's data files  
-indiv_basic <- read.csv(here("Data", "MZIR80", "REC01.CSV"), sep = ";")     # Basic respondent data
-indiv_basic_cont <- read.csv(here("Data", "MZIR80", "REC11.CSV"), sep = ";")# Basic respondent data continued
-repro_history <- read.csv(here("Data", "MZIR80", "REC21.CSV"), sep = ";")   # Birth history
-preg_history <- read.csv(here("Data", "MZIR80", "REC22.CSV"), sep = ";")    # Pregnancy outcomes
-repro_chars <- read.csv(here("Data", "MZIR80", "REC23.CSV"), sep = ";")     # Reproductive characteristics
-maternity <- read.csv(here("Data", "MZIR80", "REC41.CSV"), sep = ";")       # Maternity care
-mrg_data <- read.csv(here("Data", "MZIR80", "REC51.CSV"), sep = ";")        # Marriage and sexual activity
-dv_data <- read.csv(here("Data", "MZIR80", "RECDV.CSV"), sep = ";")         # Domestic Violence
+indiv_basic <- read.csv(here("Data", "MZIQ80", "REC01.CSV"), sep = ";")     # Basic respondent data
+indiv_basic_cont <- read.csv(here("Data", "MZIQ80", "REC11.CSV"), sep = ";")# Basic respondent data continued
+repro_history <- read.csv(here("Data", "MZIQ80", "REC21.CSV"), sep = ";")   # Birth history
+preg_history <- read.csv(here("Data", "MZIQ80", "REC22.CSV"), sep = ";")    # Pregnancy outcomes
+repro_chars <- read.csv(here("Data", "MZIQ80", "REC23.CSV"), sep = ";")     # Reproductive characteristics
+maternity <- read.csv(here("Data", "MZIQ80", "REC41.CSV"), sep = ";")       # Maternity care
+mrg_data <- read.csv(here("Data", "MZIQ80", "REC51.CSV"), sep = ";")        # Marriage and sexual activity
+dv_data <- read.csv(here("Data", "MZIQ80", "RECDV.CSV"), sep = ";")         # Domestic Violence
+contraception <- read.csv(here("Data", "MZIQ80","REC32.CSV"), sep =";")    # Contraception knowledge and use
 
 # Load individual men's data files
 indiv_basic_m <- read.csv(here("Data", "MZMR80", "MREC01.CSV"), sep = ";")   # Basic respondent data
@@ -135,13 +136,9 @@ dv_data_prep <- indiv_basic %>%
 dv_data_prep <- dv_data_prep %>%
   mutate(DV_SPV1_W_ANY_den = case_when(V044 == 1 & V502 %in% 1:2 | D100 %in% 1:2 ~ 1, TRUE ~ 0))
 
-# Child registration-----------------------------------------------------------
-
-# Data from hh schedule to be used, no merge needed
-
-# Female and Male education attainment-----------------------------------------
- 
-# Data from hh schedule to be used, no merge needed
+# Contraception-----------------------------------------------------------
+contra_prep <- left_join(contraception[, c("HHID", "CASEID", "V313")],
+                         hh_basic[, c("HHID", "HV001")], by = "HHID")
 
 # -----------------------------------------------------------------------------
 # CALCULATE INDICATORS AND AGGREGATE TO THE HOUSEHOLD LEVEL
@@ -517,12 +514,33 @@ dv_data_prep <- dv_data_prep %>%
   mutate(dv_weight = D005/1000000)
 
 # Collapse data to the household ID
-dv_data_prep <-dv_data_prep %>%
+dv_data_prep <- dv_data_prep %>%
   group_by(HV001) %>% #Group by Cluster ID
   summarise(DV_SPV1_W_ANY_num = sum(DV_SPV1_W_ANY_num, na.rm = T),
             DV_SPV1_W_ANY_den = sum(DV_SPV1_W_ANY_den))
 
+# Currently use any method of contraception
+# Currently use any method
 
+# Numerator
+contra_prep <- contra_prep %>%
+  mutate(FP_CUSA_W_MOD_num = 
+           ifelse(V313 > 0 & V313 < 8, 1, 0)) %>%   
+  set_value_labels(FP_CUSA_W_MOD_num = c(yes = 1, no = 0)) %>%
+  set_variable_labels(FP_CUSA_W_MOD_num =  "Currently used any contraceptive method")
+
+# Denominator
+contra_prep <- contra_prep %>%
+  mutate(FP_CUSA_W_MOD_den = 
+           ifelse(V313 >= 0, 1, 0)) %>%   
+  set_value_labels(FP_CUSA_W_MOD_den = c(yes = 1, no = 0)) %>%
+  set_variable_labels(FP_CUSA_W_MOD_den =  "Currently used any contraceptive method - Denominator")
+
+# Collapse data to the household ID
+contra_prep <- contra_prep %>%
+  group_by(HV001) %>% #Group by Cluster ID
+  summarise(FP_CUSA_W_MOD_num = sum(FP_CUSA_W_MOD_num),
+            FP_CUSA_W_MOD_den = sum(FP_CUSA_W_MOD_den))
 
 # -----------------------------------------------------------------------------
 # CLEAN AND SELECT FINAL VARIABLES FOR AGGREGATION TO THE CLUSTER LEVEL
@@ -562,6 +580,7 @@ MZ2022DHS_Indicators <- hh_basic_aggregated %>%
   left_join(nutrition_data, by="HV001") %>%
   left_join(mrg_and_repro_data, by="HV001") %>%
   left_join(delivery_data, by="HV001") %>%
+  left_join(contra_prep, by="HV001") %>%
   mutate(across(everything(), ~ replace_na(., 0))) # Replace NA values with 0 for missing clusters
 
 
@@ -577,55 +596,12 @@ MZ2022DHS_Indicators <- MZ2022DHS_Indicators %>%
   left_join(ge_file[,c("DHSID", "DHSCC", "DHSYEAR", "DHSCLUST", "SOURCE", "URBAN_RURA", "LATNUM", "LONGNUM")], by = "DHSCLUST") %>%
   mutate(DATASET = "MZGE81", # Data set identifier
          survey_id = "MZ2022DHS") %>% # Survey identifier
-  select(1,21:27,3:20) # Reorder columns 
-
-# CREATE COMPARISON TABLE
-
-df_weighted <- MZ2022DHS_Indicators %>%
-  # Multiply columns 13 to 32 by weight
-  mutate(across(.cols = 13:32, .fns = ~ .x * wt, .names = "mult_{.col}")) %>%
-  # Multiply columns 33 to 40 individual sampling weight.
-  mutate(across(.cols = 33:40, .fns = ~ .x * women_wt, .names = "mult_{.col}")) %>%
-  select(41:68)
-  
-# for each of the multiplied variables.
-df_pivot <- df_weighted %>%
-  # Use pivot_longer() to reshape the data, selecting only the new 'mult_' columns.
-  pivot_longer(
-    cols = starts_with("mult_"),
-    names_to = "variable",
-    values_to = "value"
-  ) %>%
-  # Group the data by the 'variable' column
-  group_by(variable) %>%
-  # Summarize the data by calculating the sum of the 'value' column for each group.
-  summarise(total_sum = sum(value))
-
-
-comparison_indicators <- df_pivot %>%
-  # Create a new column to identify the indicator and the type (numerator or denominator)
-  mutate(
-    Indicator = str_sub(variable, 1, -5),
-    type = str_sub(variable, -3, -1)
-  ) %>%
-  # Pivot the data to have separate columns for 'denominator' and 'numerator'
-  pivot_wider(
-    id_cols = Indicator,
-    names_from = type,
-    values_from = total_sum
-  ) %>%
-  # Calculate the percentage and create the final dataframe
-  mutate(Percentage = (num / den) * 100) %>%
-  # Select only the indicator and the new percentage column
-  select(Indicator, Percentage)
-# Remove _mult prefix
-comparison_indicators$Indicator <- gsub("mult_", "", comparison_indicators$Indicator)
+  select(1,23:29,3:22) # Reorder columns 
 
 
 # Save datasets
 
 write.csv(MZ2022DHS_Indicators, "MZ2022DHS_Indicators.csv")
-write.csv(comparison_indicators, "comparison_indicators.csv")
 
 # =============================================================================
 # END OF SCRIPT

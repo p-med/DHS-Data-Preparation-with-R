@@ -2,3 +2,11 @@
 .Rhistory
 .RData
 .Ruserdata
+
+# Data directory
+Data/
+
+# Outputs
+comparison_indicators.csv
+MZ2022DHS_Indicators.csv
+Indicator_Comparison.xlsx
